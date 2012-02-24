@@ -1,0 +1,135 @@
+Sed学习小结：
+    
+##########################
+##  author: zjhui       ##                      
+##  date: 2012.2.24     ##
+##########################
+
+1: sed介绍
+      sed是一个非交互式的流编辑器(stream editor),所谓非交互式，指sed只能在命令行
+    下输入命令对文件进行编辑，然后在屏幕上查看输出;而流编辑器是指sed像流水一般
+    对文件或输入进行逐行处理，然后将结果逐行输出到屏幕（除非使用-n选项取消屏幕输
+    出并且又没有显示的使用打印命令p,具体可见man sed 或 info sed）。
+
+2: How sed Works
+      
+      `sed' maintains two data buffers: the active _pattern_ space, and the
+      auxiliary _hold_ space. Both are initially empty.
+
+         `sed' operates by performing the following cycle on each lines of
+       input: first, `sed' reads one line from the input stream, removes any
+       trailing newline, and places it in the pattern space.  Then commands
+       are executed; each command can have an address associated to it:
+       addresses are a kind of condition code, and a command is only executed
+       if the condition is verified before the command is to be executed.
+
+        sed 处理文本时，首先sed从流输入中读入一行，去掉尾部的换行符，并且将它放入
+     pattern space。然后执行命令，每一个命令都有一个地址与它相关，地址是一些有条件
+     的代码，并且在命令执行之前要进行条件验证。
+
+         When the end of the script is reached, unless the `-n' option is in
+      use, the contents of pattern space are printed out to the output
+      stream, adding back the trailing newline if it was removed.(1) Then the
+      next cycle starts for the next input line.
+        
+        除非加了-n参数，把现在的pattern space中的内容打印出来，并且在后面打印原来
+     去掉的换行符。（一种非平凡情况，一个文件仅一行，尾部没换行，sed只打印，不
+     会尾部加换行，但若在尾部又附加了输出，他会再补上那个换行）。
+
+         Unless special commands (like `D') are used, the pattern space is
+       deleted between two cycles. The hold space, on the other hand, keeps
+       its data between cycles (see commands `h', `H', `x', `g', `G' to move
+       data between both buffers).
+                                        --from 'info sed'
+
+    explain:
+        pattern space(模式空间): 相当于车间sed把流内容在这里处理；
+        hold space(保留空间): 相当于仓库，加工的半成品在这里保存，当然加工好的成品也
+    在这里保存。
+
+3.实例讲解。
+    
+    sed维护两个数据缓冲区:主动模式空间（pattern space）和辅助保留空间（hold space），通常sed
+从输入流读取一行存入pattern space，这里就是文本编辑操作发生的地方，hold space最初是空的，但也
+有在pattern space 和 hold space直接移动数据的命令。
+    
+     d      Delete pattern space.  Start next cycle.
+
+     D      Delete up to the first embedded newline in  the  pattern  space.
+            Start  next  cycle,  but skip reading from the input if there is
+            still data in the pattern space.
+
+     h H    Copy/append pattern space to hold space.
+
+     g G    Copy/append hold space to pattern space.
+
+     l      List out the current line in a ``visually unambiguous'' form.
+
+     l width
+            List out the current line in a  ``visually  unambiguous''  form,
+            breaking it at width characters.  This is a GNU extension.
+
+     n N    Read/append the next line of input into the pattern space.
+
+     p      Print the current pattern space.
+
+     P      Print  up  to  the first embedded newline of the current pattern
+            space.
+
+(1) 倒置所有行，第一行成为最后一行，依次类推（模拟“tac”）
+    方法1: sed '1!G;h;$!d'
+    方法2: sed -n '1!G;h;$p'
+    
+    explain:
+        1!G: 不是第一行时，将hold space中的内容追加到pattern space末尾
+        h: 将pattern space的内容复制到hold space
+        $!d: 不是最后一行，删除，不打印出来,否则默认打印该行内容
+        $p: 最后一行时打印当前pattern space中的内容直到第一个嵌入式换行。
+
+    example:
+        [jiahui@ubuntu /home/jiahui\(git:master)，]
+        $ seq 6
+        1
+        2
+        3
+        4
+        5
+        6
+        [jiahui@ubuntu /home/jiahui\(git:master)，]
+        $ seq 6 | sed '1!G;h;$!d'
+        6
+        5
+        4
+        3
+        2
+        1
+         第一行的时候：
+            1!G  在处理第一行的时候不将hold space中的内容添加到当前处理行(pattern space)的末尾，因为此时hold space为空
+            h    将pattern space中的内容拷贝到hold space(1)
+            $!d  因为不是最后一行，将pattern space中的内容删除，开始下一行
+        第二行的时候：
+            1!G  在处理第二行的时候，将hold space中的内容追加到pattern space（即当前处理行）的末尾
+            h    将pattern space(21)的内容拷贝到hold space(21)中
+            $!d  因为不是最后一行，将pattern space中的内容删除，开始下一行
+            .
+            .
+            .
+        第六行的时候：
+            1!G  在处理第六行的时候，将hold space中的内容追加到pattern space的末尾
+            h    将pattern space(654321)的内容拷贝到hold space(654321)
+            $!d  到达最后一行，打印pattren space中的内容
+
+同理可理解 sed -n '1!G;h;$p'
+
+现在还有个问题，就是 
+# 如果当前行以反斜杠“\”结束，则将下一行并到当前行末尾
+# 并去掉原来行尾的反斜杠
+sed -e :a -e '/\\$/N; s/\\\n//; ta' 
+上面这句 :a ta 的作用
+
+参考资料:
+        man sed 
+        info sed
+        http://sed.sourceforge.net/sed1line_zh-CN.html
+        http://www.sealinger.com/archives/297/
+        http://bbs.unixbeta.com/archiver/tid-19528.html
